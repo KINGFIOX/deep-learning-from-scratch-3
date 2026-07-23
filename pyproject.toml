@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dezero"
+version = "0.0.13"
+description = "Deep Learning Framework from Zero"
+readme = "README.md"
+requires-python = ">=3.9,<3.12"
+license = "MIT"
+license-files = ["LICENSE.md"]
+authors = [
+    { name = "Koki Saitoh", email = "koki0702@gmail.com" },
+]
+dependencies = [
+    "matplotlib>=3.5",
+    "numpy>=1.21,<2",
+    "pillow>=9",
+    "ruff>=0.15.22",
+]
+
+[project.optional-dependencies]
+examples = [
+    "opencv-python>=4.7",
+    "scipy>=1.9",
+]
+
+[dependency-groups]
+dev = [
+    "chainer==7.8.1",
+    "setuptools<60",
+]
+
+[tool.setuptools]
+packages = ["dezero"]
+
+[tool.uv.extra-build-dependencies]
+chainer = ["setuptools<81"]

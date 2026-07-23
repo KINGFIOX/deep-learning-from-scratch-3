@@ -66,6 +66,27 @@ $ cd steps
 $ python step31.py
 ```
 
+### uv を使う場合
+
+[uv](https://docs.astral.sh/uv/) をインストールした後、リポジトリのルートで環境と依存関係を同期します。
+
+```console
+$ uv sync
+$ uv run python steps/step01.py
+```
+
+テストを実行する場合は、次のコマンドを使います。
+
+```console
+$ uv run python -m unittest discover tests
+```
+
+SciPy と OpenCV を使うサンプルも実行する場合は、追加の依存関係を同期します。
+
+```console
+$ uv sync --extra examples
+```
+
 ## デモ
 
 DeZeroの他の実装例は[examples](/examples)にあります。
