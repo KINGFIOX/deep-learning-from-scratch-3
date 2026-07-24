@@ -1,10 +1,12 @@
+from typing import Union
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np
 import matplotlib.pyplot as plt
 import dezero
-from dezero import Model
+from dezero import Model, Variable
 import dezero.functions as F
 import dezero.layers as L
 
@@ -18,15 +20,15 @@ seqlen = len(train_set)
 
 
 class SimpleRNN(Model):
-    def __init__(self, hidden_size, out_size):
+    def __init__(self, hidden_size: int, out_size: int) -> None:
         super().__init__()
         self.rnn = L.RNN(hidden_size)
         self.fc = L.Linear(out_size)
 
-    def reset_state(self):
+    def reset_state(self) -> None:
         self.rnn.reset_state()
 
-    def __call__(self, x):
+    def __call__(self, x: Union[np.ndarray, Variable]) -> Variable:
         h = self.rnn(x)
         y = self.fc(h)
         return y

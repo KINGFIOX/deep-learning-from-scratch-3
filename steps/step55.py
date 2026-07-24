@@ -1,4 +1,6 @@
-def get_conv_outsize(input_size, kernel_size, stride, pad):
+def get_conv_outsize(
+    input_size: int, kernel_size: int, stride: int, pad: int
+) -> int:
     return (input_size + pad * 2 - kernel_size) // stride + 1
 
 

@@ -5,7 +5,6 @@ import numpy as np
 from PIL import Image
 import cv2
 import dezero
-import dezero.functions as F
 from dezero.models import VGG16
 
 
@@ -23,11 +22,11 @@ predict_output = y[0, predict_id]
 
 predict_output.backward(retain_grad=True)
 grads = last_conv_output.grad
-pooled_grads = F.average(grads, axis=(0, 2, 3))
+pooled_grads = grads.mean(axis=(0, 2, 3))
 
 heatmap = last_conv_output.data[0]
 for c in range(heatmap.shape[0]):
-    heatmap[c] *= pooled_grads[c].data
+    heatmap[c] *= pooled_grads[c]
 
 heatmap = np.mean(heatmap, axis=0)
 heatmap = np.maximum(heatmap, 0)

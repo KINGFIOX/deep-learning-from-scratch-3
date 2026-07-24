@@ -1,3 +1,5 @@
+from typing import Union
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -7,18 +9,22 @@ from dezero import Variable, Function
 from dezero.utils import plot_dot_graph
 
 
+ArrayOrScalar = Union[np.ndarray, np.generic, bool, int, float, complex]
+Gradient = Union[ArrayOrScalar, Variable]
+
+
 class Sin(Function):
-    def forward(self, x):
+    def forward(self, x: np.ndarray) -> ArrayOrScalar:
         y = np.sin(x)
         return y
 
-    def backward(self, gy):
+    def backward(self, gy: Gradient) -> Gradient:
         x = self.inputs[0].data
         gx = gy * np.cos(x)
         return gx
 
 
-def sin(x):
+def sin(x: Variable) -> Variable:
     return Sin()(x)
 
 
@@ -30,7 +36,7 @@ print(y.data)
 print(x.grad)
 
 
-def my_sin(x, threshold=0.0001):
+def my_sin(x: Variable, threshold: float = 0.0001) -> Variable:
     y = 0
     for i in range(100000):
         c = (-1) ** i / math.factorial(2 * i + 1)

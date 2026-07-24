@@ -1,6 +1,13 @@
-import weakref
-import numpy as np
 import contextlib
+import weakref
+from collections.abc import Iterator
+from typing import Optional, Union, cast, overload
+
+import numpy as np
+
+Scalar = Union[np.generic, bool, int, float, complex]
+ArrayOrScalar = Union[np.ndarray, Scalar]
+ArrayOrScalars = Union[ArrayOrScalar, tuple[ArrayOrScalar, ...]]
 
 
 class Config:
@@ -8,7 +15,7 @@ class Config:
 
 
 @contextlib.contextmanager
-def using_config(name, value):
+def using_config(name: str, value: bool) -> Iterator[None]:
     old_value = getattr(Config, name)
     setattr(Config, name, value)
     try:
@@ -17,14 +24,16 @@ def using_config(name, value):
         setattr(Config, name, old_value)
 
 
-def no_grad():
+def no_grad() -> contextlib.AbstractContextManager[None]:
     return using_config('enable_backprop', False)
 
 
 class Variable:
     __array_priority__ = 200
 
-    def __init__(self, data, name=None):
+    def __init__(
+        self, data: Optional[np.ndarray], name: Optional[str] = None
+    ) -> None:
         if data is not None:
             if not isinstance(data, np.ndarray):
                 raise TypeError('{} is not supported'.format(type(data)))
@@ -36,45 +45,45 @@ class Variable:
         self.generation = 0
 
     @property
-    def shape(self):
+    def shape(self) -> tuple[int, ...]:
         return self.data.shape
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return self.data.ndim
 
     @property
-    def size(self):
+    def size(self) -> int:
         return self.data.size
 
     @property
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self.data.dtype
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.data)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         if self.data is None:
             return 'variable(None)'
         p = str(self.data).replace('\n', '\n' + ' ' * 9)
         return 'variable(' + p + ')'
 
-    def set_creator(self, func):
+    def set_creator(self, func: "Function") -> None:
         self.creator = func
         self.generation = func.generation + 1
 
-    def cleargrad(self):
+    def cleargrad(self) -> None:
         self.grad = None
 
-    def backward(self, retain_grad=False):
+    def backward(self, retain_grad: bool = False) -> None:
         if self.grad is None:
             self.grad = np.ones_like(self.data)
 
         funcs = []
         seen_set = set()
 
-        def add_func(f):
+        def add_func(f: "Function") -> None:
             if f not in seen_set:
                 funcs.append(f)
                 seen_set.add(f)
@@ -103,23 +112,38 @@ class Variable:
                     y().grad = None  # y is weakref
 
 
-def as_variable(obj):
+VariableOrArray = Union[Variable, np.ndarray]
+Operand = Union[Variable, ArrayOrScalar]
+VariableOrVariables = Union[Variable, list[Variable]]
+
+
+def as_variable(obj: VariableOrArray) -> Variable:
     if isinstance(obj, Variable):
         return obj
     return Variable(obj)
 
 
-def as_array(x):
+@overload
+def as_array(x: ArrayOrScalar) -> np.ndarray:
+    ...
+
+
+@overload
+def as_array(x: Variable) -> Variable:
+    ...
+
+
+def as_array(x: Operand) -> VariableOrArray:
     if np.isscalar(x):
         return np.array(x)
     return x
 
 
 class Function:
-    def __call__(self, *inputs):
+    def __call__(self, *inputs: VariableOrArray) -> VariableOrVariables:
         inputs = [as_variable(x) for x in inputs]
 
-        xs = [x.data for x in inputs]
+        xs = [cast(np.ndarray, x.data) for x in inputs]
         ys = self.forward(*xs)
         if not isinstance(ys, tuple):
             ys = (ys,)
@@ -134,104 +158,112 @@ class Function:
 
         return outputs if len(outputs) > 1 else outputs[0]
 
-    def forward(self, xs):
+    def forward(self, *xs: np.ndarray) -> ArrayOrScalars:
         raise NotImplementedError()
 
-    def backward(self, gys):
+    def backward(self, *gys: ArrayOrScalar) -> ArrayOrScalars:
         raise NotImplementedError()
 
 
 class Add(Function):
-    def forward(self, x0, x1):
+    def forward(self, x0: np.ndarray, x1: np.ndarray) -> ArrayOrScalar:
         y = x0 + x1
         return y
 
-    def backward(self, gy):
+    def backward(
+        self, gy: ArrayOrScalar
+    ) -> tuple[ArrayOrScalar, ArrayOrScalar]:
         return gy, gy
 
 
-def add(x0, x1):
+def add(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
-    return Add()(x0, x1)
+    return cast(Variable, Add()(x0, x1))
 
 
 class Mul(Function):
-    def forward(self, x0, x1):
+    def forward(self, x0: np.ndarray, x1: np.ndarray) -> ArrayOrScalar:
         y = x0 * x1
         return y
 
-    def backward(self, gy):
+    def backward(
+        self, gy: ArrayOrScalar
+    ) -> tuple[ArrayOrScalar, ArrayOrScalar]:
         x0, x1 = self.inputs[0].data, self.inputs[1].data
         return gy * x1, gy * x0
 
 
-def mul(x0, x1):
+def mul(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
-    return Mul()(x0, x1)
+    return cast(Variable, Mul()(x0, x1))
 
 
 class Neg(Function):
-    def forward(self, x):
+    def forward(self, x: np.ndarray) -> ArrayOrScalar:
         return -x
 
-    def backward(self, gy):
+    def backward(self, gy: ArrayOrScalar) -> ArrayOrScalar:
         return -gy
 
 
-def neg(x):
-    return Neg()(x)
+def neg(x: VariableOrArray) -> Variable:
+    return cast(Variable, Neg()(x))
 
 
 class Sub(Function):
-    def forward(self, x0, x1):
+    def forward(self, x0: np.ndarray, x1: np.ndarray) -> ArrayOrScalar:
         y = x0 - x1
         return y
 
-    def backward(self, gy):
+    def backward(
+        self, gy: ArrayOrScalar
+    ) -> tuple[ArrayOrScalar, ArrayOrScalar]:
         return gy, -gy
 
 
-def sub(x0, x1):
+def sub(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
-    return Sub()(x0, x1)
+    return cast(Variable, Sub()(x0, x1))
 
 
-def rsub(x0, x1):
+def rsub(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
     return sub(x1, x0)
 
 
 class Div(Function):
-    def forward(self, x0, x1):
+    def forward(self, x0: np.ndarray, x1: np.ndarray) -> ArrayOrScalar:
         y = x0 / x1
         return y
 
-    def backward(self, gy):
+    def backward(
+        self, gy: ArrayOrScalar
+    ) -> tuple[ArrayOrScalar, ArrayOrScalar]:
         x0, x1 = self.inputs[0].data, self.inputs[1].data
         gx0 = gy / x1
         gx1 = gy * (-x0 / x1 ** 2)
         return gx0, gx1
 
 
-def div(x0, x1):
+def div(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
-    return Div()(x0, x1)
+    return cast(Variable, Div()(x0, x1))
 
 
-def rdiv(x0, x1):
+def rdiv(x0: VariableOrArray, x1: Operand) -> Variable:
     x1 = as_array(x1)
     return div(x1, x0)
 
 
 class Pow(Function):
-    def __init__(self, c):
+    def __init__(self, c: float) -> None:
         self.c = c
 
-    def forward(self, x):
+    def forward(self, x: np.ndarray) -> ArrayOrScalar:
         y = x ** self.c
         return y
 
-    def backward(self, gy):
+    def backward(self, gy: ArrayOrScalar) -> ArrayOrScalar:
         x = self.inputs[0].data
         c = self.c
 
@@ -239,8 +271,8 @@ class Pow(Function):
         return gx
 
 
-def pow(x, c):
-    return Pow(c)(x)
+def pow(x: VariableOrArray, c: float) -> Variable:
+    return cast(Variable, Pow(c)(x))
 
 
 Variable.__add__ = add

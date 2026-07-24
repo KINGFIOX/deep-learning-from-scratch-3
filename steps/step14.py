@@ -1,8 +1,13 @@
+from typing import Optional, Union, cast
+
 import numpy as np
+
+ArrayOrScalar = Union[np.ndarray, np.generic, bool, int, float, complex]
+ArrayOrScalars = Union[ArrayOrScalar, tuple[ArrayOrScalar, ...]]
 
 
 class Variable:
-    def __init__(self, data):
+    def __init__(self, data: Optional[np.ndarray]) -> None:
         if data is not None:
             if not isinstance(data, np.ndarray):
                 raise TypeError('{} is not supported'.format(type(data)))
@@ -11,13 +16,13 @@ class Variable:
         self.grad = None
         self.creator = None
 
-    def set_creator(self, func):
+    def set_creator(self, func: "Function") -> None:
         self.creator = func
 
-    def cleargrad(self):
+    def cleargrad(self) -> None:
         self.grad = None
 
-    def backward(self):
+    def backward(self) -> None:
         if self.grad is None:
             self.grad = np.ones_like(self.data)
 
@@ -39,15 +44,18 @@ class Variable:
                     funcs.append(x.creator)
 
 
-def as_array(x):
+VariableOrVariables = Union[Variable, list[Variable]]
+
+
+def as_array(x: ArrayOrScalar) -> np.ndarray:
     if np.isscalar(x):
         return np.array(x)
     return x
 
 
 class Function:
-    def __call__(self, *inputs):
-        xs = [x.data for x in inputs]
+    def __call__(self, *inputs: Variable) -> VariableOrVariables:
+        xs = [cast(np.ndarray, x.data) for x in inputs]
         ys = self.forward(*xs)
         if not isinstance(ys, tuple):
             ys = (ys,)
@@ -59,24 +67,26 @@ class Function:
         self.outputs = outputs
         return outputs if len(outputs) > 1 else outputs[0]
 
-    def forward(self, xs):
+    def forward(self, *xs: np.ndarray) -> ArrayOrScalars:
         raise NotImplementedError()
 
-    def backward(self, gys):
+    def backward(self, *gys: ArrayOrScalar) -> ArrayOrScalars:
         raise NotImplementedError()
 
 
 class Add(Function):
-    def forward(self, x0, x1):
+    def forward(self, x0: np.ndarray, x1: np.ndarray) -> ArrayOrScalar:
         y = x0 + x1
         return y
 
-    def backward(self, gy):
+    def backward(
+        self, gy: ArrayOrScalar
+    ) -> tuple[ArrayOrScalar, ArrayOrScalar]:
         return gy, gy
 
 
-def add(x0, x1):
-    return Add()(x0, x1)
+def add(x0: Variable, x1: Variable) -> Variable:
+    return cast(Variable, Add()(x0, x1))
 
 
 x = Variable(np.array(3.0))

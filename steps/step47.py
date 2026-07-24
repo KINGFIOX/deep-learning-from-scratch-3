@@ -1,3 +1,5 @@
+from typing import Union
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -8,7 +10,7 @@ import dezero.functions as F
 from dezero.models import MLP
 
 
-def softmax1d(x):
+def softmax1d(x: Union[np.ndarray, Variable]) -> Variable:
     x = as_variable(x)
     y = F.exp(x)
     sum_y = F.sum(y)

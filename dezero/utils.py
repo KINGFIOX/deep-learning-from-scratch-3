@@ -130,14 +130,14 @@ def reshape_sum_backward(gy, x_shape, axis, keepdims):
     """Reshape gradient appropriately for dezero.functions.sum's backward.
 
     Args:
-        gy (dezero.Variable): Gradient variable from the output by backprop.
+        gy (ndarray): Gradient array from the output by backprop.
         x_shape (tuple): Shape used at sum function's forward.
         axis (None or int or tuple of ints): Axis used at sum function's
             forward.
         keepdims (bool): Keepdims used at sum function's forward.
 
     Returns:
-        dezero.Variable: Gradient variable which is reshaped appropriately
+        ndarray: Gradient array which is reshaped appropriately.
     """
     ndim = len(x_shape)
     tupled_axis = axis
@@ -212,7 +212,7 @@ def gradient_check(f, x, *args, rtol=1e-4, atol=1e-5, **kwargs):
     num_grad = numerical_grad(f, x, *args, **kwargs)
     y = f(x, *args, **kwargs)
     y.backward()
-    bp_grad = x.grad.data
+    bp_grad = x.grad
 
     assert bp_grad.shape == num_grad.shape
     res = array_allclose(num_grad, bp_grad, atol=atol, rtol=rtol)

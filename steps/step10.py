@@ -1,9 +1,14 @@
 import unittest
+from collections.abc import Callable
+from typing import Optional, Union, cast
+
 import numpy as np
+
+ArrayOrScalar = Union[np.ndarray, np.generic, bool, int, float, complex]
 
 
 class Variable:
-    def __init__(self, data):
+    def __init__(self, data: Optional[np.ndarray]) -> None:
         if data is not None:
             if not isinstance(data, np.ndarray):
                 raise TypeError('{} is not supported'.format(type(data)))
@@ -12,10 +17,10 @@ class Variable:
         self.grad = None
         self.creator = None
 
-    def set_creator(self, func):
+    def set_creator(self, func: "Function") -> None:
         self.creator = func
 
-    def backward(self):
+    def backward(self) -> None:
         if self.grad is None:
             self.grad = np.ones_like(self.data)
 
@@ -29,15 +34,16 @@ class Variable:
                 funcs.append(x.creator)
 
 
-def as_array(x):
+def as_array(x: ArrayOrScalar) -> np.ndarray:
+    """Convert a variable type to a ndarray."""
     if np.isscalar(x):
         return np.array(x)
     return x
 
 
 class Function:
-    def __call__(self, input):
-        x = input.data
+    def __call__(self, input: Variable) -> Variable:
+        x = cast(np.ndarray, input.data)
         y = self.forward(x)
         output = Variable(as_array(y))
         output.set_creator(self)
@@ -45,29 +51,31 @@ class Function:
         self.output = output
         return output
 
-    def forward(self, x):
+    def forward(self, x: np.ndarray) -> ArrayOrScalar:
         raise NotImplementedError()
 
-    def backward(self, gy):
+    def backward(self, gy: ArrayOrScalar) -> ArrayOrScalar:
         raise NotImplementedError()
 
 
 class Square(Function):
-    def forward(self, x):
+    def forward(self, x: np.ndarray) -> ArrayOrScalar:
         y = x ** 2
         return y
 
-    def backward(self, gy):
+    def backward(self, gy: ArrayOrScalar) -> ArrayOrScalar:
         x = self.input.data
         gx = 2 * x * gy
         return gx
 
 
-def square(x):
+def square(x: Variable) -> Variable:
     return Square()(x)
 
 
-def numerical_diff(f, x, eps=1e-4):
+def numerical_diff(
+    f: Callable[[Variable], Variable], x: Variable, eps: float = 1e-4
+) -> ArrayOrScalar:
     x0 = Variable(x.data - eps)
     x1 = Variable(x.data + eps)
     y0 = f(x0)
@@ -76,20 +84,20 @@ def numerical_diff(f, x, eps=1e-4):
 
 
 class SquareTest(unittest.TestCase):
-    def test_forward(self):
+    def test_forward(self) -> None:
         x = Variable(np.array(2.0))
         y = square(x)
         expected = np.array(4.0)
         self.assertEqual(y.data, expected)
 
-    def test_backward(self):
+    def test_backward(self) -> None:
         x = Variable(np.array(3.0))
         y = square(x)
         y.backward()
         expected = np.array(6.0)
         self.assertEqual(x.grad, expected)
 
-    def test_gradient_check(self):
+    def test_gradient_check(self) -> None:
         x = Variable(np.random.rand(1))
         y = square(x)
         y.backward()

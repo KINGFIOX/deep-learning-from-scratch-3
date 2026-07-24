@@ -1,7 +1,10 @@
+from typing import Union
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import numpy as np
+from dezero import Variable
 import dezero.functions as F
 import dezero.layers as L
 
@@ -14,7 +17,7 @@ l1 = L.Linear(10)
 l2 = L.Linear(1)
 
 
-def predict(x):
+def predict(x: Union[np.ndarray, Variable]) -> Variable:
     y = l1(x)
     y = F.sigmoid(y)
     y = l2(y)
@@ -34,6 +37,6 @@ for i in range(iters):
 
     for l in [l1, l2]:
         for p in l.params():
-            p.data -= lr * p.grad.data
+            p.data -= lr * p.grad
     if i % 1000 == 0:
         print(loss)

@@ -39,7 +39,7 @@ class WeightDecay:
 
     def __call__(self, params):
         for param in params:
-            param.grad.data += self.rate * param.data
+            param.grad += self.rate * param.data
 
 
 class ClipGrad:
@@ -49,13 +49,13 @@ class ClipGrad:
     def __call__(self, params):
         total_norm = 0
         for param in params:
-            total_norm += (param.grad.data ** 2).sum()
+            total_norm += (param.grad ** 2).sum()
         total_norm = math.sqrt(float(total_norm))
 
         rate = self.max_norm / (total_norm + 1e-6)
         if rate < 1:
             for param in params:
-                param.grad.data *= rate
+                param.grad *= rate
 
 
 class FreezeParam:
@@ -83,7 +83,7 @@ class SGD(Optimizer):
         self.lr = lr
 
     def update_one(self, param):
-        param.data -= self.lr * param.grad.data
+        param.data -= self.lr * param.grad
 
 
 class MomentumSGD(Optimizer):
@@ -101,7 +101,7 @@ class MomentumSGD(Optimizer):
 
         v = self.vs[v_key]
         v *= self.momentum
-        v -= self.lr * param.grad.data
+        v -= self.lr * param.grad
         param.data += v
 
 
@@ -121,7 +121,7 @@ class AdaGrad(Optimizer):
 
         lr = self.lr
         eps = self.eps
-        grad = param.grad.data
+        grad = param.grad
         h = self.hs[h_key]
 
         h += grad * grad
@@ -147,7 +147,7 @@ class AdaDelta(Optimizer):
         msg, msdx = self.msg[key], self.msdx[key]
         rho = self.rho
         eps = self.eps
-        grad = param.grad.data
+        grad = param.grad
 
         msg *= rho
         msg += (1 - rho) * grad * grad
@@ -188,7 +188,7 @@ class Adam(Optimizer):
 
         m, v = self.ms[key], self.vs[key]
         beta1, beta2, eps = self.beta1, self.beta2, self.eps
-        grad = param.grad.data
+        grad = param.grad
 
         m += (1 - beta1) * (grad - m)
         v += (1 - beta2) * (grad * grad - v)

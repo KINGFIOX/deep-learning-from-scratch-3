@@ -1,3 +1,5 @@
+import dezero
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -16,12 +18,12 @@ W = Variable(np.zeros((1, 1)))
 b = Variable(np.zeros(1))
 
 
-def predict(x):
+def predict(x: Variable) -> Variable:
     y = F.matmul(x, W) + b
     return y
 
 
-def mean_squared_error(x0, x1):
+def mean_squared_error(x0: Variable, x1: Variable) -> Variable:
     diff = x0 - x1
     return F.sum(diff ** 2) / len(diff)
 
@@ -38,8 +40,8 @@ for i in range(iters):
     loss.backward()
 
     # Update .data attribute (No need grads when updating params)
-    W.data -= lr * W.grad.data
-    b.data -= lr * b.grad.data
+    W.data -= lr * W.grad
+    b.data -= lr * b.grad
     print(W, b, loss)
 
 

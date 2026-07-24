@@ -1,3 +1,5 @@
+from typing import Union
+
 if '__file__' in globals():
     import os, sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -18,7 +20,7 @@ W2 = Variable(0.01 * np.random.randn(H, O))
 b2 = Variable(np.zeros(O))
 
 
-def predict(x):
+def predict(x: Union[np.ndarray, Variable]) -> Variable:
     y = F.linear(x, W1, b1)
     y = F.sigmoid(y)
     y = F.linear(y, W2, b2)
@@ -38,10 +40,10 @@ for i in range(iters):
     b2.cleargrad()
     loss.backward()
 
-    W1.data -= lr * W1.grad.data
-    b1.data -= lr * b1.grad.data
-    W2.data -= lr * W2.grad.data
-    b2.data -= lr * b2.grad.data
+    W1.data -= lr * W1.grad
+    b1.data -= lr * b1.grad
+    W2.data -= lr * W2.grad
+    b2.data -= lr * b2.grad
     if i % 1000 == 0:
         print(loss)
 

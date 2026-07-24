@@ -14,8 +14,9 @@ class Sin(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        gx = gy * cos(x)
+        x = self.inputs[0].data
+        xp = cuda.get_array_module(x)
+        gx = gy * xp.cos(x)
         return gx
 
 
@@ -30,8 +31,9 @@ class Cos(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        gx = gy * -sin(x)
+        x = self.inputs[0].data
+        xp = cuda.get_array_module(x)
+        gx = gy * -xp.sin(x)
         return gx
 
 
@@ -46,7 +48,7 @@ class Tanh(Function):
         return y
 
     def backward(self, gy):
-        y = self.outputs[0]()  # weakref
+        y = self.outputs[0]().data
         gx = gy * (1 - y * y)
         return gx
 
@@ -62,7 +64,7 @@ class Exp(Function):
         return y
 
     def backward(self, gy):
-        y = self.outputs[0]()  # weakref
+        y = self.outputs[0]().data
         gx = gy * y
         return gx
 
@@ -78,7 +80,7 @@ class Log(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
+        x = self.inputs[0].data
         gx = gy / x
         return gx
 
@@ -100,7 +102,7 @@ class Reshape(Function):
         return y
 
     def backward(self, gy):
-        return reshape(gy, self.x_shape)
+        return gy.reshape(self.x_shape)
 
 
 def reshape(x, shape):
@@ -119,11 +121,11 @@ class Transpose(Function):
 
     def backward(self, gy):
         if self.axes is None:
-            return transpose(gy)
+            return gy.transpose()
 
         axes_len = len(self.axes)
         inv_axes = tuple(np.argsort([ax % axes_len for ax in self.axes]))
-        return transpose(gy, inv_axes)
+        return gy.transpose(inv_axes)
 
 
 def transpose(x, axes=None):
@@ -139,28 +141,14 @@ class GetItem(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        f = GetItemGrad(self.slices, x.shape)
-        return f(gy)
-
-
-class GetItemGrad(Function):
-    def __init__(self, slices, in_shape):
-        self.slices = slices
-        self.in_shape = in_shape
-
-    def forward(self, gy):
         xp = dezero.cuda.get_array_module(gy)
-        gx = xp.zeros(self.in_shape, dtype=gy.dtype)
+        gx = xp.zeros(self.inputs[0].shape, dtype=gy.dtype)
 
         if xp is np:
             np.add.at(gx, self.slices, gy)
         else:
             xp.scatter_add(gx, self.slices, gy)
         return gx
-
-    def backward(self, ggx):
-        return get_item(ggx, self.slices)
 
 
 def get_item(x, slices):
@@ -196,7 +184,8 @@ class Sum(Function):
     def backward(self, gy):
         gy = utils.reshape_sum_backward(gy, self.x_shape, self.axis,
                                         self.keepdims)
-        gx = broadcast_to(gy, self.x_shape)
+        xp = cuda.get_array_module(gy)
+        gx = xp.broadcast_to(gy, self.x_shape)
         return gx
 
 
@@ -214,7 +203,8 @@ class SumTo(Function):
         return y
 
     def backward(self, gy):
-        gx = broadcast_to(gy, self.x_shape)
+        xp = cuda.get_array_module(gy)
+        gx = xp.broadcast_to(gy, self.x_shape)
         return gx
 
 
@@ -235,7 +225,7 @@ class BroadcastTo(Function):
         return y
 
     def backward(self, gy):
-        gx = sum_to(gy, self.x_shape)
+        gx = utils.sum_to(gy, self.x_shape)
         return gx
 
 
@@ -260,9 +250,9 @@ class MatMul(Function):
         return y
 
     def backward(self, gy):
-        x, W = self.inputs
-        gx = matmul(gy, W.T)
-        gW = matmul(x.T, gy)
+        x, W = self.inputs[0].data, self.inputs[1].data
+        gx = gy.dot(W.T)
+        gW = x.T.dot(gy)
         return gx, gW
 
 
@@ -278,10 +268,10 @@ class Linear(Function):
         return y
 
     def backward(self, gy):
-        x, W, b = self.inputs
-        gb = None if b.data is None else sum_to(gy, b.shape)
-        gx = matmul(gy, W.T)
-        gW = matmul(x.T, gy)
+        x, W, b = [input.data for input in self.inputs]
+        gb = None if b is None else utils.sum_to(gy, b.shape)
+        gx = gy.dot(W.T)
+        gW = x.T.dot(gy)
         return gx, gW, gb
 
 
@@ -316,7 +306,7 @@ class Sigmoid(Function):
         return y
 
     def backward(self, gy):
-        y = self.outputs[0]()
+        y = self.outputs[0]().data
         gx = gy * y * (1 - y)
         return gx
 
@@ -332,8 +322,8 @@ class ReLU(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        mask = x.data > 0
+        x = self.inputs[0].data
+        mask = x > 0
         gx = gy * mask
         return gx
 
@@ -361,7 +351,7 @@ class Softmax(Function):
         return y
 
     def backward(self, gy):
-        y = self.outputs[0]()
+        y = self.outputs[0]().data
         gx = y * gy
         sumdx = gx.sum(axis=self.axis, keepdims=True)
         gx -= y * sumdx
@@ -382,8 +372,9 @@ class LogSoftmax(Function):
         return y
 
     def backward(self, gy):
-        y = self.outputs[0]()
-        gx = gy - exp(y) * gy.sum(axis=self.axis, keepdims=True)
+        y = self.outputs[0]().data
+        xp = cuda.get_array_module(y)
+        gx = gy - xp.exp(y) * gy.sum(axis=self.axis, keepdims=True)
         return gx
 
 
@@ -401,8 +392,8 @@ class LeakyReLU(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        mask = (x.data > 0).astype(gy.dtype)
+        x = self.inputs[0].data
+        mask = (x > 0).astype(gy.dtype)
         mask[mask <= 0] = self.slope
         gx = gy * mask
         return gx
@@ -429,7 +420,7 @@ class MeanSquaredError(Function):
         return y
 
     def backward(self, gy):
-        x0, x1 = self.inputs
+        x0, x1 = self.inputs[0].data, self.inputs[1].data
         diff = x0 - x1
         gx0 = gy * diff * (2. / len(diff))
         gx1 = -gx0
@@ -461,16 +452,17 @@ class SoftmaxCrossEntropy(Function):
         return y
 
     def backward(self, gy):
-        x, t = self.inputs
+        x, t = self.inputs[0].data, self.inputs[1].data
         N, CLS_NUM = x.shape
 
-        gy *= 1/N
-        y = softmax(x)
+        xp = cuda.get_array_module(x)
+        y = x - x.max(axis=1, keepdims=True)
+        y = xp.exp(y)
+        y /= y.sum(axis=1, keepdims=True)
         # convert to one-hot
-        xp = cuda.get_array_module(t.data)
-        t_onehot = xp.eye(CLS_NUM, dtype=t.dtype)[t.data]
-        y = (y - t_onehot) * gy
-        return y
+        t_onehot = xp.eye(CLS_NUM, dtype=t.dtype)[t]
+        gx = (y - t_onehot) * (gy / N)
+        return gx
 
 
 def softmax_cross_entropy(x, t):
@@ -576,7 +568,7 @@ class BatchNorm(Function):
             N, C, H, W = gy.shape
             gy = gy.transpose(0, 2, 3, 1).reshape(-1, C)
 
-        x, gamma, beta = self.inputs
+        x, gamma, beta = [input.data for input in self.inputs]
         batch_size = len(gy)
 
         if x.ndim == 4:
@@ -585,8 +577,8 @@ class BatchNorm(Function):
         mean = x.sum(axis=0) / batch_size
         xc = (x - mean) * self.inv_std
 
-        gbeta = sum(gy, axis=0)
-        ggamma = sum(xc * gy, axis=0)
+        gbeta = gy.sum(axis=0)
+        ggamma = (xc * gy).sum(axis=0)
         gx = gy - gbeta / batch_size - xc * ggamma / batch_size
         gx *= gamma * self.inv_std
 
@@ -616,14 +608,15 @@ class Max(Function):
         return y
 
     def backward(self, gy):
-        x = self.inputs[0]
-        y = self.outputs[0]()  # weakref
+        x = self.inputs[0].data
+        y = self.outputs[0]().data
 
         shape = utils.max_backward_shape(x, self.axis)
-        gy = reshape(gy, shape)
-        y = reshape(y, shape)
-        cond = (x.data == y.data)
-        gy = broadcast_to(gy, cond.shape)
+        gy = gy.reshape(shape)
+        y = y.reshape(shape)
+        cond = (x == y)
+        xp = cuda.get_array_module(gy)
+        gy = xp.broadcast_to(gy, cond.shape)
         return gy * cond
 
 
@@ -652,8 +645,8 @@ class Clip(Function):
         return y
 
     def backward(self, gy):
-        x, = self.inputs
-        mask = (x.data >= self.x_min) * (x.data <= self.x_max)
+        x = self.inputs[0].data
+        mask = (x >= self.x_min) * (x <= self.x_max)
         gx = gy * mask
         return gx
 
